@@ -25,6 +25,15 @@ constexpr uint8_t fontset[FONTSET_SIZE] = {
 	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
 
+// Compute power
+int power(int x, int y) {
+	int result = 1;
+	for (int i = 0; i < y; i++) {
+		result *= x;
+	}
+	return result;
+}
+
 class Chip8 {
 public:
 	Chip8();
@@ -57,6 +66,46 @@ public:
 		uint8_t n = dist(gen);
 		return n;
 	}
+
+	// ************ INSTRUCTIONS ************
+	// CLS - 00E0 - Clear the display
+	void OP_00E0() {
+		unsigned int screenByteSize = sizeof(screen) / 4;
+		for (int i = 0; i < screenByteSize; i++) {
+			screen[i] = 0x00000000;
+		}
+	}
+
+	// RET - 00EE - Return from a subroutine
+	void OP_00EE() {
+		pc = stack[--sp];
+	}
+	
+	// JP addr - Jump to location nnn
+	void OP_1nnn() {
+		uint16_t address = opcode & 0x0FFFu;
+		pc = address;
+	}
+
+	// CALL addr - 2nnn - Call subroutine at nnn
+	void OP_2nnn() {
+		stack[sp++] = pc;
+		uint16_t jmpAddress = opcode & 0x0FFFu;
+		pc = jmpAddress;
+	}
+
+	// SE Vx, byte - 3xkk - Skip next instruction if Vx = kk
+	void OP_3xkk() {
+		uint8_t regIndex = (opcode & 0x0F00) / power(2, 8); // Which register to compare
+		uint8_t valueToCompare = (opcode & 0x00FF);
+
+		if (registers[regIndex] == valueToCompare) { // Values are equal, increment pc by 2
+			pc += 2;
+		}
+	}
+	// **************************************
+
+
 private:
 	void loadFonts() { // Loads the font set in the chip's memory
 		int pos = 0x50; // Font set start address
@@ -103,5 +152,6 @@ void loadROM(const char* filename, Chip8& chip8) {
 int main() {
 	std::cout << "Chip8 Emulator!" << std::endl;
 	Chip8* chip8 = new Chip8();
+	chip8->OP_3xkk();
 	return 0;
 }
