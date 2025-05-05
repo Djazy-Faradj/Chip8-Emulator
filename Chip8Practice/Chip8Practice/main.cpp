@@ -5,6 +5,7 @@
 
 constexpr uint16_t START_ADDRESS = 0x200; // Starting address for Chip8 programs
 constexpr unsigned int FONTSET_SIZE = 80; // The font set size
+constexpr unsigned int FONTSET_START_ADDRESS = 0x50; // Start address for writing font data
 // The bytes representing each character in binary
 constexpr uint8_t fontset[FONTSET_SIZE] = {
 	0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -24,6 +25,9 @@ constexpr uint8_t fontset[FONTSET_SIZE] = {
 	0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
 	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
+
+constexpr uint8_t SCREEN_WIDTH = 64;
+constexpr uint8_t SCREEN_HEIGHT = 32;
 
 // Compute power
 int power(int x, int y) {
@@ -94,24 +98,308 @@ public:
 		pc = jmpAddress;
 	}
 
-	// SE Vx, byte - 3xkk - Skip next instruction if Vx = kk
+	// SE Vx, byte - 3xkk - Skip next instruction if Vx == kk
 	void OP_3xkk() {
-		uint8_t regIndex = (opcode & 0x0F00) / power(2, 8); // Which register to compare
-		uint8_t valueToCompare = (opcode & 0x00FF);
+		uint8_t regX = (opcode & 0x0F00u) >> 8u; // Which register to compare
+		uint8_t valueToCompare = (opcode & 0x00FFu);
 
-		if (registers[regIndex] == valueToCompare) { // Values are equal, increment pc by 2
+		if (registers[regX] == valueToCompare) { // Values are equal, increment pc by 2
 			pc += 2;
 		}
 	}
+
+	// SNE Vx, byte - 4xkk - Skip next instruction if Vx != kk
+	void OP_4xkk() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u; // Which register to compare
+		uint8_t valueToCompare = (opcode & 0x00FFu);
+
+		if (registers[regX] != valueToCompare) // Values are not equal, increment pc by 2
+			pc += 2;
+	}
+
+	// SE Vx, Vy - 5xy0 - Skip next instruction if Vx == Vy
+	void OP_5xy0() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u; // Index of register X
+		uint8_t regY = (opcode & 0x00F0u) >> 4u; // Index of register Y
+
+		if (registers[regX] == registers[regY])
+			pc += 2;
+	}
+
+	// LD Vx, byte - 6xkk - The interpreter puts the value kk into register Vx
+	void OP_6xkk() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t value = opcode & 0x00FFu;
+		registers[regX] = value;
+	}
+
+	// ADD Vx, byte - 7xkk - Adds the value kk to the value of register Vx, then stores the result in Vx
+	void OP_7xkk() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t value = opcode & 0x00FFu;
+		registers[regX] += value;
+	}
+
+	// LD Vx, Vy - 8xy0 - Stores the value of register Vy in register Vx
+	void OP_8xy0() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		registers[regX] = registers[regY];
+	}
+
+	// OR Vx, Vy - 8xy1 - Performs a bitwise OR on the values of Vx and Vy, stored in Vx
+	void OP_8xy1() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		registers[regX] = registers[regX] | registers[regY];
+	}
+
+	// AND Vx, Vy - 8xy2 - Performs a bitwise AND on the values of Vx and Vy, stored in Vx
+	void OP_8xy2() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		registers[regX] = registers[regX] & registers[regY];
+	}
+	
+	// XOR Vx, Vy - 8xy3 - Performs a bitwise XOR on the values of Vx and Vy, stored in Vx
+	void OP_8xy3() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		registers[regX] = registers[regX] ^ registers[regY];
+	}
+
+	// ADD Vx, Vy | 8xy4 | Performs a bitwise AND on the values of Vx and Vy, stored in Vx
+	void OP_8xy4() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		uint16_t result = registers[regX] + registers[regY]; // So we can check for carry
+		if (result > 255u) registers[0xF] = 1;	// Set the carry to 1
+		else registers[0xF] = 0;				// No carry, set it to 0
+		registers[regX] = result & 0x00FFu;
+	}
+
+	// SUB Vx, Vy | 8xy5 | Set Vx = Vx - Vy, set VF = NOT borrow
+	void OP_8xy5() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		if (registers[regX] > registers[regY]) registers[0xF] = 1;
+		else registers[0xF] = 0;
+		registers[regX] = registers[regX] - registers[regY];
+	}
+
+	// SHR Vx {, Vy} | 8xy6 | Set Vx = Vx SHR 1
+	void OP_8xy6() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		registers[0xF] = registers[regX] & 0x1;
+		registers[regX] >>= 1;
+	}
+
+	// SUBN Vx, Vy | 8xy7 | Set Vx = Vy - Vx, set VF = NOT borrow
+	void OP_8xy7() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		if (registers[regX] > registers[regY]) registers[0xF] = 1;
+		else registers[0xF] = 0;
+		registers[regX] = registers[regX] - registers[regY];
+	}
+
+	// SHL Vx {, Vy} | 8xyE | Set Vx = Vx 
+	void OP_8xyE() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		registers[0xF] = registers[regX] & 0x1;
+		registers[regX] <<= 1;
+	}
+
+	// SNE Vx, Vy | 9xy0 | Skip next instruction if Vx != Vy
+	void OP_9xy0() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		if (registers[regX] != registers[regY])
+			pc += 2;
+	}
+
+	// LD I, addr | Annn | The value of register I is set to nnn
+	void OP_Annn() {
+		uint16_t value = opcode & 0x0FFFu;
+		index = value;
+	}
+
+	// JP V0, addr | Bnnn | Jump to location nnn + V0
+	void OP_Bnnn() {
+		uint16_t value = opcode & 0x0FFFu;
+		pc = value + registers[0x0];
+	}
+
+	// RND Vx, byte | Cxkk | Set Vx = random byte AND kk
+	void OP_Cxkk() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t randVal = genRand();
+		uint8_t value = opcode & 0x00FF;
+		registers[regX] = randVal & value;
+	}
+
+	// DRW Vx, Vy, nibble | Dxyn | Display n-byte sprite starting at memory location I at (Vx, Vy),  set VF = collision
+	void OP_Dxyn() {
+		uint16_t startAddress = index;
+		uint8_t byteCount = opcode & 0x000Fu;
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t regY = (opcode & 0x00F0u) >> 4u;
+		uint8_t xCoord = registers[regX];
+		uint8_t yCoord = registers[regY];
+
+		registers[0xF] = 0;
+
+		for (unsigned int row = 0; row < byteCount; ++row)
+		{
+			uint8_t spriteByte = memory[index + row];
+
+			for (unsigned int col = 0; col < 8; ++col)
+			{
+				uint8_t spritePixel = spriteByte & (0x80u >> col);
+				uint32_t* screenPixel = &screen[(yCoord + row) * SCREEN_WIDTH + (xCoord + col)];
+				// Sprite pixel is on
+				if (spritePixel) {
+					// Screen pixel also on - collision
+					if (*screenPixel == 0xFFFFFFFF) {
+						registers[0xF] = 1;
+					}
+					// Effectively XOR with the sprite pixel
+					*screenPixel ^= 0xFFFFFFFF;
+				}
+			}
+		}
+	}
+
+	// SKP Vx | Ex9E | Skip next instruction if key with the value of Vx is pressed
+	void OP_Ex9E() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t key = registers[regX];
+		if (keypad[key]) pc += 2;
+	}
+	
+	// SKNP Vx | ExA1 | Skip next instruction if key with the value of Vx is not pressed
+	void OP_ExA1() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t key = registers[regX];
+		if (!keypad[key]) pc += 2;
+	}
+
+	// LD Vx, DT | Fx07 | The value of DT is placed into Vx
+	void OP_Fx07() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		registers[regX] = delay_timer;
+	}
+
+	// Potential mistake**LD Vx, K | Fx0A | Wait for a key press, store the value of the key in Vx
+	void OP_Fx0A() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		while (true) {
+			for (int i = 0; i < 16; i++) {
+				if (keypad[i]) {
+					registers[regX] = i;
+					return;
+				}
+			}
+		}
+	}
+
+	// LD DT, Vx | Fx15 | Set delay timer = Vx
+	void OP_Fx15() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		delay_timer = registers[regX];
+	}
+
+	// LD ST, Vx | Fx18 | Set sound timer = Vx
+	void OP_Fx18() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		sound_timer = registers[regX];
+	}
+
+	// ADD I, Vx | Fx1E | The values of I and Vx are added, and the results are stored in I
+	void OP_Fx1E() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		index += registers[regX];
+	}
+
+	// LD F, Vx | Fx29 | Set I = location of sprite for digit Vx
+	void OP_Fx29() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t value = registers[regX];
+		index = FONTSET_START_ADDRESS + (registers[regX] + 5);
+	}
+
+	// LD B, Vx | Fx33 | Store BCD representation of Vx in memory locations I, I+1, and I+2
+	void OP_Fx33() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		uint8_t value = registers[regX];
+		uint8_t hundreds = value / 100;
+		uint8_t tens = (value - (hundreds * 100)) / 10;
+		uint8_t ones = (value - (hundreds * 100) - (tens * 10));
+		memory[index] = hundreds;
+		memory[index + 1] = tens;
+		memory[index + 2] = ones;
+	}
+
+	// LD [I], Vx | Fx55 | Store registers V0 through Vx in memory starting at location I
+	void OP_Fx55() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		for (uint8_t i = 0; i <= regX; i++) {
+			memory[index + i] = registers[i];
+		}
+	}
+
+	// LD Vx, [I] | Fx65 | Read registers V0 through Vx from memory starting at location I
+	void OP_Fx65() {
+		uint8_t regX = (opcode & 0x0F00u) >> 8u;
+		for (uint8_t i = 0; i <= regX; i++) {
+			registers[i] = memory[index + i];
+		}
+	}
+	
+	void OP_NULL(){}
 	// **************************************
 
+	void (Chip8::*table[16])(){};
+	void (Chip8::* table0[15])() {};
+	void (Chip8::* table8[15])() {};
+	void (Chip8::* tableE[15])() {};
+	void (Chip8::* tableF[102])() {};
+
+	void Table0() {
+
+	}
+
+	void Table8() {
+
+	}
+
+	void TableE() {
+
+	}
+
+	void TableF() {
+
+	}
 
 private:
 	void loadFonts() { // Loads the font set in the chip's memory
-		int pos = 0x50; // Font set start address
+		int pos = FONTSET_START_ADDRESS; // Font set start address
 		for (int i = 0; i < FONTSET_SIZE; i++) {
 			memory[pos + i] = fontset[i];
 		}
+	}
+
+	void Cycle() {
+		// Fetch
+		opcode = (memory[pc] << 8u) + memory[pc + 1];
+		pc += 2;
+
+		// Decode and Execute
+		((*this).*(table[(opcode & 0xF000u) >> 12u]))();
+
+		// Update timers for delay and sound
+		if (delay_timer > 0) delay_timer--;
+		if (sound_timer > 0) sound_timer--;
 	}
 };
 
@@ -120,7 +408,67 @@ Chip8::Chip8() { // Constructor of the Chip
 	pc = 0x200;
 	// Load the fonts into memory
 	loadFonts();
+
+	// Start by filling the sub tables with OP_NULL
+	for (int i = 0; i < 102; i++) {
+		if (i < 16) {
+			table0[i] = &Chip8::OP_NULL;
+			table8[i] = &Chip8::OP_NULL;
+			tableE[i] = &Chip8::OP_NULL;
+		}
+		tableF[i] = &Chip8::OP_NULL;
+	}
+
+	// Set up function pointer tables
+	table[0x0] = &Chip8::Table0;
+	table[0x1] = &Chip8::OP_1nnn;
+	table[0x2] = &Chip8::OP_2nnn;
+	table[0x3] = &Chip8::OP_3xkk;
+	table[0x4] = &Chip8::OP_4xkk;
+	table[0x5] = &Chip8::OP_5xy0;
+	table[0x6] = &Chip8::OP_6xkk;
+	table[0x7] = &Chip8::OP_7xkk;
+	table[0x8] = &Chip8::Table8;
+	table[0x9] = &Chip8::OP_9xy0;
+	table[0xA] = &Chip8::OP_Annn;
+	table[0xB] = &Chip8::OP_Bnnn;
+	table[0xC] = &Chip8::OP_Cxkk;
+	table[0xD] = &Chip8::OP_Dxyn;
+	table[0xE] = &Chip8::TableE;
+	table[0xF] = &Chip8::TableF;
+
+	// table0
+	table0[0x0] = &Chip8::OP_00E0;
+	table0[0xE] = &Chip8::OP_00EE;
+
+	// tableE
+	tableE[0x1] = &Chip8::OP_ExA1;
+	tableE[0xE] = &Chip8::OP_Ex9E;
+
+	// table8
+	table8[0x0] = &Chip8::OP_8xy0;
+	table8[0x1] = &Chip8::OP_8xy1;
+	table8[0x2] = &Chip8::OP_8xy2;
+	table8[0x3] = &Chip8::OP_8xy3;
+	table8[0x4] = &Chip8::OP_8xy4;
+	table8[0x5] = &Chip8::OP_8xy5;
+	table8[0x6] = &Chip8::OP_8xy6;
+	table8[0x7] = &Chip8::OP_8xy7;
+	table8[0xE] = &Chip8::OP_8xyE;
+
+	// tableF
+	tableF[0x07] = &Chip8::OP_Fx07;
+	tableF[0x0A] = &Chip8::OP_Fx0A;
+	tableF[0x15] = &Chip8::OP_Fx15;
+	tableF[0x18] = &Chip8::OP_Fx18;
+	tableF[0x1E] = &Chip8::OP_Fx1E;
+	tableF[0x29] = &Chip8::OP_Fx29;
+	tableF[0x33] = &Chip8::OP_Fx33;
+	tableF[0x55] = &Chip8::OP_Fx55;
+	tableF[0x65] = &Chip8::OP_Fx65;
 }
+
+
 
 // Function that loads ROM content into memory
 void loadROM(const char* filename, Chip8& chip8) {
@@ -152,6 +500,5 @@ void loadROM(const char* filename, Chip8& chip8) {
 int main() {
 	std::cout << "Chip8 Emulator!" << std::endl;
 	Chip8* chip8 = new Chip8();
-	chip8->OP_3xkk();
 	return 0;
 }
