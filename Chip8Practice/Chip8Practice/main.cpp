@@ -484,6 +484,9 @@ public:
 		window = SDL_CreateWindow(windowTitle, windowWidth, windowHeight, NULL);
 		renderer = SDL_CreateRenderer(window, NULL);
 		texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, textureWidth, textureHeight);
+		
+		// Set the texture scale to nearest
+		SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
 	}
 
 	~Platform() {
@@ -516,7 +519,7 @@ public:
 
 			case SDL_EVENT_KEY_DOWN:
 			{
-				switch (event.key.scancode)
+				switch (event.key.which)
 				{
 				case SDLK_ESCAPE:
 				{
@@ -730,8 +733,8 @@ int main(int argc, char* argv[]) {
 	if (argc != 4) {
 		std::cerr << "Usage: " << argv[0] << " <Scale> <Delay> <ROM>\n";
 		int i;
+		std::cout << "Press Q + ENTER to close.";
 		std::cin >> i;
-		std::cout << "Press ENTER to close.";
 		return -1;
 	}
 
