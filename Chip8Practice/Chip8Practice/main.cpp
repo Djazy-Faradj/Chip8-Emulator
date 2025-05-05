@@ -1,7 +1,9 @@
 #include <SDL3/SDL.h>
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <random>
+#include <chrono>
 
 constexpr uint16_t START_ADDRESS = 0x200; // Starting address for Chip8 programs
 constexpr unsigned int FONTSET_SIZE = 80; // The font set size
@@ -472,6 +474,10 @@ Chip8::Chip8() { // Constructor of the Chip
 }
 
 class Platform {
+private:
+	SDL_Window* window{};
+	SDL_Renderer* renderer{};
+	SDL_Texture* texture{};
 public:
 	Platform(char* windowTitle, int windowWidth, int windowHeight, int textureWidth, int textureHeight) {
 		SDL_Init(SDL_INIT_VIDEO);
@@ -689,11 +695,6 @@ public:
 
 		return quit;
 	}
-
-private:
-	SDL_Window* window{};
-	SDL_Renderer* renderer{};
-	SDL_Texture* texture{};
 };
 
 // Function that loads ROM content into memory
@@ -723,8 +724,40 @@ void loadROM(const char* filename, Chip8& chip8) {
 	fclose(file);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
 	std::cout << "Chip8 Emulator -- Djazy Faradj" << std::endl;
-	Chip8* chip8 = new Chip8();
+	
+	if (argc != 4) {
+		std::cerr << "Usage: " << argv[0] << " <Scale> <Delay> <ROM>\n";
+		int i;
+		std::cin >> i;
+		std::cout << "Press ENTER to close.";
+		return -1;
+	}
+
+	int scale = std::stoi(argv[1]);
+	int cycleDelay = std::stoi(argv[2]);
+	char* romFilename = argv[3];
+
+	Platform* platform = new Platform((char*)"Chip-8 Emulator", SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale, SCREEN_WIDTH, SCREEN_HEIGHT); // Start SDL Platform
+	Chip8* chip8 = new Chip8(); // Instanciate chip
+
+	loadROM(romFilename, *chip8); // Load ROM in the chip
+	int videoPitch = sizeof(chip8->screen[0]) * SCREEN_WIDTH;
+
+	auto lastCycleTime = std::chrono::high_resolution_clock::now();
+	bool quit = false;
+
+	while (!quit) {
+		quit = platform->ProcessInput(chip8->keypad);
+		auto currentTime = std::chrono::high_resolution_clock::now();
+
+		float dt = std::chrono::duration<float, std::chrono::milliseconds::period>(currentTime - lastCycleTime).count();
+		if (dt > cycleDelay) {
+			lastCycleTime = currentTime;
+			chip8->Cycle();
+			platform->Update(chip8->screen, videoPitch);
+		}
+	}
 	return 0;
 }
