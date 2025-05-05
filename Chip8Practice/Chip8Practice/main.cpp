@@ -366,27 +366,19 @@ public:
 	void (Chip8::* tableF[102])() {};
 
 	void Table0() {
-
+		((*this).*(table0[opcode & 0x000Fu]))();
 	}
 
 	void Table8() {
-
+		((*this).*(table8[opcode & 0x000Fu]))();
 	}
 
 	void TableE() {
-
+		((*this).*(tableE[opcode & 0x000Fu]))();
 	}
 
 	void TableF() {
-
-	}
-
-private:
-	void loadFonts() { // Loads the font set in the chip's memory
-		int pos = FONTSET_START_ADDRESS; // Font set start address
-		for (int i = 0; i < FONTSET_SIZE; i++) {
-			memory[pos + i] = fontset[i];
-		}
+		((*this).*(tableF[opcode & 0x00FFu]))();
 	}
 
 	void Cycle() {
@@ -398,8 +390,75 @@ private:
 		((*this).*(table[(opcode & 0xF000u) >> 12u]))();
 
 		// Update timers for delay and sound
-		if (delay_timer > 0) delay_timer--;
-		if (sound_timer > 0) sound_timer--;
+		if (delay_timer > 0) --delay_timer;
+		if (sound_timer > 0) --sound_timer;
+	}
+private:
+	void loadFonts() { // Loads the font set in the chip's memory
+		int pos = FONTSET_START_ADDRESS; // Font set start address
+		for (int i = 0; i < FONTSET_SIZE; i++) {
+			memory[pos + i] = fontset[i];
+		}
+	}
+
+	void initTables() {
+		// Start by filling the sub tables with OP_NULL
+		for (int i = 0; i < 102; i++) {
+			if (i < 16) {
+				table0[i] = &Chip8::OP_NULL;
+				table8[i] = &Chip8::OP_NULL;
+				tableE[i] = &Chip8::OP_NULL;
+			}
+			tableF[i] = &Chip8::OP_NULL;
+		}
+
+		// Set up function pointer tables
+		table[0x0] = &Chip8::Table0;
+		table[0x1] = &Chip8::OP_1nnn;
+		table[0x2] = &Chip8::OP_2nnn;
+		table[0x3] = &Chip8::OP_3xkk;
+		table[0x4] = &Chip8::OP_4xkk;
+		table[0x5] = &Chip8::OP_5xy0;
+		table[0x6] = &Chip8::OP_6xkk;
+		table[0x7] = &Chip8::OP_7xkk;
+		table[0x8] = &Chip8::Table8;
+		table[0x9] = &Chip8::OP_9xy0;
+		table[0xA] = &Chip8::OP_Annn;
+		table[0xB] = &Chip8::OP_Bnnn;
+		table[0xC] = &Chip8::OP_Cxkk;
+		table[0xD] = &Chip8::OP_Dxyn;
+		table[0xE] = &Chip8::TableE;
+		table[0xF] = &Chip8::TableF;
+
+		// table0
+		table0[0x0] = &Chip8::OP_00E0;
+		table0[0xE] = &Chip8::OP_00EE;
+
+		// tableE
+		tableE[0x1] = &Chip8::OP_ExA1;
+		tableE[0xE] = &Chip8::OP_Ex9E;
+
+		// table8
+		table8[0x0] = &Chip8::OP_8xy0;
+		table8[0x1] = &Chip8::OP_8xy1;
+		table8[0x2] = &Chip8::OP_8xy2;
+		table8[0x3] = &Chip8::OP_8xy3;
+		table8[0x4] = &Chip8::OP_8xy4;
+		table8[0x5] = &Chip8::OP_8xy5;
+		table8[0x6] = &Chip8::OP_8xy6;
+		table8[0x7] = &Chip8::OP_8xy7;
+		table8[0xE] = &Chip8::OP_8xyE;
+
+		// tableF
+		tableF[0x07] = &Chip8::OP_Fx07;
+		tableF[0x0A] = &Chip8::OP_Fx0A;
+		tableF[0x15] = &Chip8::OP_Fx15;
+		tableF[0x18] = &Chip8::OP_Fx18;
+		tableF[0x1E] = &Chip8::OP_Fx1E;
+		tableF[0x29] = &Chip8::OP_Fx29;
+		tableF[0x33] = &Chip8::OP_Fx33;
+		tableF[0x55] = &Chip8::OP_Fx55;
+		tableF[0x65] = &Chip8::OP_Fx65;
 	}
 };
 
@@ -408,67 +467,234 @@ Chip8::Chip8() { // Constructor of the Chip
 	pc = 0x200;
 	// Load the fonts into memory
 	loadFonts();
-
-	// Start by filling the sub tables with OP_NULL
-	for (int i = 0; i < 102; i++) {
-		if (i < 16) {
-			table0[i] = &Chip8::OP_NULL;
-			table8[i] = &Chip8::OP_NULL;
-			tableE[i] = &Chip8::OP_NULL;
-		}
-		tableF[i] = &Chip8::OP_NULL;
-	}
-
-	// Set up function pointer tables
-	table[0x0] = &Chip8::Table0;
-	table[0x1] = &Chip8::OP_1nnn;
-	table[0x2] = &Chip8::OP_2nnn;
-	table[0x3] = &Chip8::OP_3xkk;
-	table[0x4] = &Chip8::OP_4xkk;
-	table[0x5] = &Chip8::OP_5xy0;
-	table[0x6] = &Chip8::OP_6xkk;
-	table[0x7] = &Chip8::OP_7xkk;
-	table[0x8] = &Chip8::Table8;
-	table[0x9] = &Chip8::OP_9xy0;
-	table[0xA] = &Chip8::OP_Annn;
-	table[0xB] = &Chip8::OP_Bnnn;
-	table[0xC] = &Chip8::OP_Cxkk;
-	table[0xD] = &Chip8::OP_Dxyn;
-	table[0xE] = &Chip8::TableE;
-	table[0xF] = &Chip8::TableF;
-
-	// table0
-	table0[0x0] = &Chip8::OP_00E0;
-	table0[0xE] = &Chip8::OP_00EE;
-
-	// tableE
-	tableE[0x1] = &Chip8::OP_ExA1;
-	tableE[0xE] = &Chip8::OP_Ex9E;
-
-	// table8
-	table8[0x0] = &Chip8::OP_8xy0;
-	table8[0x1] = &Chip8::OP_8xy1;
-	table8[0x2] = &Chip8::OP_8xy2;
-	table8[0x3] = &Chip8::OP_8xy3;
-	table8[0x4] = &Chip8::OP_8xy4;
-	table8[0x5] = &Chip8::OP_8xy5;
-	table8[0x6] = &Chip8::OP_8xy6;
-	table8[0x7] = &Chip8::OP_8xy7;
-	table8[0xE] = &Chip8::OP_8xyE;
-
-	// tableF
-	tableF[0x07] = &Chip8::OP_Fx07;
-	tableF[0x0A] = &Chip8::OP_Fx0A;
-	tableF[0x15] = &Chip8::OP_Fx15;
-	tableF[0x18] = &Chip8::OP_Fx18;
-	tableF[0x1E] = &Chip8::OP_Fx1E;
-	tableF[0x29] = &Chip8::OP_Fx29;
-	tableF[0x33] = &Chip8::OP_Fx33;
-	tableF[0x55] = &Chip8::OP_Fx55;
-	tableF[0x65] = &Chip8::OP_Fx65;
+	// Setup the tables
+	initTables();
 }
 
+class Platform {
+public:
+	Platform(char* windowTitle, int windowWidth, int windowHeight, int textureWidth, int textureHeight) {
+		SDL_Init(SDL_INIT_VIDEO);
+		window = SDL_CreateWindow(windowTitle, windowWidth, windowHeight, NULL);
+		renderer = SDL_CreateRenderer(window, NULL);
+		texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, textureWidth, textureHeight);
+	}
 
+	~Platform() {
+		SDL_DestroyTexture(texture);
+		SDL_DestroyRenderer(renderer);
+		SDL_DestroyWindow(window);
+		SDL_Quit();
+	}
+
+	void Update(void const* buffer, int pitch) {
+		SDL_UpdateTexture(texture, nullptr, buffer, pitch);
+		SDL_RenderClear(renderer);
+		SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+		SDL_RenderPresent(renderer);
+	}
+
+	bool ProcessInput(uint8_t* keys) {
+		bool quit = false;
+
+		SDL_Event event;
+
+		while (SDL_PollEvent(&event))
+		{
+			switch (event.type)
+			{
+			case SDL_EVENT_QUIT:
+			{
+				quit = true;
+			} break;
+
+			case SDL_EVENT_KEY_DOWN:
+			{
+				switch (event.key.scancode)
+				{
+				case SDLK_ESCAPE:
+				{
+					quit = true;
+				} break;
+
+				case SDLK_X:
+				{
+					keys[0] = 1;
+				} break;
+
+				case SDLK_1:
+				{
+					keys[1] = 1;
+				} break;
+
+				case SDLK_2:
+				{
+					keys[2] = 1;
+				} break;
+
+				case SDLK_3:
+				{
+					keys[3] = 1;
+				} break;
+
+				case SDLK_Q:
+				{
+					keys[4] = 1;
+				} break;
+
+				case SDLK_W:
+				{
+					keys[5] = 1;
+				} break;
+
+				case SDLK_E:
+				{
+					keys[6] = 1;
+				} break;
+
+				case SDLK_A:
+				{
+					keys[7] = 1;
+				} break;
+
+				case SDLK_S:
+				{
+					keys[8] = 1;
+				} break;
+
+				case SDLK_D:
+				{
+					keys[9] = 1;
+				} break;
+
+				case SDLK_Z:
+				{
+					keys[0xA] = 1;
+				} break;
+
+				case SDLK_C:
+				{
+					keys[0xB] = 1;
+				} break;
+
+				case SDLK_4:
+				{
+					keys[0xC] = 1;
+				} break;
+
+				case SDLK_R:
+				{
+					keys[0xD] = 1;
+				} break;
+
+				case SDLK_F:
+				{
+					keys[0xE] = 1;
+				} break;
+
+				case SDLK_V:
+				{
+					keys[0xF] = 1;
+				} break;
+				}
+			} break;
+
+			case SDL_EVENT_KEY_UP:
+			{
+				switch (event.key.scancode)
+				{
+				case SDLK_X:
+				{
+					keys[0] = 0;
+				} break;
+
+				case SDLK_1:
+				{
+					keys[1] = 0;
+				} break;
+
+				case SDLK_2:
+				{
+					keys[2] = 0;
+				} break;
+
+				case SDLK_3:
+				{
+					keys[3] = 0;
+				} break;
+
+				case SDLK_Q:
+				{
+					keys[4] = 0;
+				} break;
+
+				case SDLK_W:
+				{
+					keys[5] = 0;
+				} break;
+
+				case SDLK_E:
+				{
+					keys[6] = 0;
+				} break;
+
+				case SDLK_A:
+				{
+					keys[7] = 0;
+				} break;
+
+				case SDLK_S:
+				{
+					keys[8] = 0;
+				} break;
+
+				case SDLK_D:
+				{
+					keys[9] = 0;
+				} break;
+
+				case SDLK_Z:
+				{
+					keys[0xA] = 0;
+				} break;
+
+				case SDLK_C:
+				{
+					keys[0xB] = 0;
+				} break;
+
+				case SDLK_4:
+				{
+					keys[0xC] = 0;
+				} break;
+
+				case SDLK_R:
+				{
+					keys[0xD] = 0;
+				} break;
+
+				case SDLK_F:
+				{
+					keys[0xE] = 0;
+				} break;
+
+				case SDLK_V:
+				{
+					keys[0xF] = 0;
+				} break;
+				}
+			} break;
+			}
+		}
+
+		return quit;
+	}
+
+private:
+	SDL_Window* window{};
+	SDL_Renderer* renderer{};
+	SDL_Texture* texture{};
+};
 
 // Function that loads ROM content into memory
 void loadROM(const char* filename, Chip8& chip8) {
@@ -498,7 +724,7 @@ void loadROM(const char* filename, Chip8& chip8) {
 }
 
 int main() {
-	std::cout << "Chip8 Emulator!" << std::endl;
+	std::cout << "Chip8 Emulator -- Djazy Faradj" << std::endl;
 	Chip8* chip8 = new Chip8();
 	return 0;
 }
