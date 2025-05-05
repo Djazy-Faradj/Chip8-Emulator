@@ -519,7 +519,7 @@ public:
 
 			case SDL_EVENT_KEY_DOWN:
 			{
-				switch (event.key.which)
+				switch (event.key.key)
 				{
 				case SDLK_ESCAPE:
 				{
@@ -610,7 +610,7 @@ public:
 
 			case SDL_EVENT_KEY_UP:
 			{
-				switch (event.key.scancode)
+				switch (event.key.key)
 				{
 				case SDLK_X:
 				{
