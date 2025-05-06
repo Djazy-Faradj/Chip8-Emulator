@@ -1,3 +1,10 @@
+/*
+Chip-8 Emulator
+Author: Djazy Faradj
+Special Thanks to Austin Morlan
+Finished May 5th, 2025
+*/
+
 #include <SDL3/SDL.h>
 #include <fstream>
 #include <iostream>
@@ -30,15 +37,6 @@ constexpr uint8_t fontset[FONTSET_SIZE] = {
 
 constexpr uint8_t SCREEN_WIDTH = 64;
 constexpr uint8_t SCREEN_HEIGHT = 32;
-
-// Compute power
-int power(int x, int y) {
-	int result = 1;
-	for (int i = 0; i < y; i++) {
-		result *= x;
-	}
-	return result;
-}
 
 class Chip8 {
 public:
